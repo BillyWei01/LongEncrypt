@@ -1,7 +1,7 @@
 public class HexUtil {
     private static final byte[] EMPTY_BYTE_ARRAY = new byte[0];
 
-    private static final byte[] HEX_DIGITS = {
+    private static final char[] HEX_DIGITS = {
             '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
             'a', 'b', 'c', 'd', 'e', 'f'};
 
@@ -14,7 +14,7 @@ public class HexUtil {
         if((n >>> 48) > 0){
             throw new IllegalArgumentException(n + " is bigger than 2^48");
         }
-        byte[] buf = new byte[12];
+        char[] buf = new char[12];
         for (int i = 5; i >= 0; i--) {
             int b = (int) n;
             int index = i << 1;
@@ -49,7 +49,7 @@ public class HexUtil {
     }
 
     public static String long2Hex(long a) {
-        byte[] buf = new byte[16];
+        char[] buf = new char[16];
         for (int i = 7; i >= 0; i--) {
             int b = (int) a;
             int index = i << 1;
@@ -91,7 +91,7 @@ public class HexUtil {
             return "";
         }
         int len = bytes.length;
-        byte[] buf = new byte[len << 1];
+        char[] buf = new char[len << 1];
         for (int i = 0; i < len; i++) {
             int b = bytes[i];
             int index = i << 1;
@@ -129,5 +129,5 @@ public class HexUtil {
             throw new NumberFormatException("invalid hex number");
         }
     }
-
 }
+
