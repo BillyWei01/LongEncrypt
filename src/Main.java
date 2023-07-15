@@ -94,11 +94,54 @@ public class Main {
         System.out.println("y = " + y);
     }
 
+    private static void testNumberCipher() {
+        byte[] key = new byte[24];
+        Random r = new Random();
+        r.nextBytes(key);
+        NumberCipher cipher = new NumberCipher(key);
+
+        boolean success = true;
+        for (int i = 0; i < 100; i++) {
+            long x = r.nextLong();
+            long y = cipher.encryptLong(x);
+            long z = cipher.decryptLong(y);
+            if (x != z) {
+                success = false;
+                break;
+            }
+        }
+        if (success) {
+            System.out.println("Test encode long success");
+        } else {
+            System.out.println("Test encode long failed");
+        }
+
+        if(!success){
+            return;
+        }
+        for (int i = 0; i < 100; i++) {
+            int x = r.nextInt();
+            int y = cipher.encryptInt(x);
+            int z = cipher.decryptInt(y);
+            if (x != z) {
+                success = false;
+                break;
+            }
+        }
+        if (success) {
+            System.out.println("Test encode int success");
+        } else {
+            System.out.println("Test encode int failed");
+        }
+    }
+
     public static void main(String[] args) {
         testEncodeLong64();
         testEncodeLong48();
-        testBase62();
-        testBase62ForShortLink();
-        testLong48ToHex();
+        testNumberCipher();
+
+//        testBase62();
+//        testBase62ForShortLink();
+//        testLong48ToHex();
     }
 }

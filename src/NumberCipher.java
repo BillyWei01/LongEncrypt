@@ -1,28 +1,11 @@
-
 /**
- * 基本思路和 AES 相似，包含混淆层，扩散层，和轮加密。
- * 轮加密所用密钥不需要经过密钥扩展，而是直接用 SecureRandom 生成。
- * 若使用，请记得生成自己的密钥。
+ * Use encryption operator of AES to encrypt/decrypt number.
  * <br>
- * Note: 这个是原始版本，新版是 NumberEncryptor，两个版本原理是一样的。
+ * Link to <a href="https://juejin.cn/post/6844904078561001486">LongEncrypt</a>
  */
-public class LongEncoder {
-    /*
-    // generate Keys,
-    private static void getKey(){
-        SecureRandom r = new SecureRandom();
-        int round = 4;
-        byte[] bytes = new byte[(round + 1) * 8];
-        r.nextBytes(bytes);
-        for (int i = 0; i < round + 1; i++) {
-            for (int j = 0; j < 8; j++) {
-                System.out.print(bytes[i*8+j] +", ");
-            }
-            System.out.println();
-        }
-    }
-    */
-    private static final int ROUND = 4;
+public class NumberCipher {
+    private static final int ROUND = 2;
+    private static final int KEY_LEN = (ROUND + 1) * 8; // 24
 
     private static final byte[] S_BOX = {
             99, 124, 119, 123, -14, 107, 111, -59, 48, 1, 103, 43, -2, -41, -85, 118,
@@ -81,13 +64,82 @@ public class LongEncoder {
             -5, -7, -1, -3, -13, -15, -9, -11, -21, -23, -17, -19, -29, -31, -25, -27};
 
 
-    private static final byte[] KEY = {
-            -14, 40, 52, -119, -126, -47, 74, 73,
-            -124, 81, -14, 116, 107, -5, 89, -97,
-            49, 93, -121, -40, -55, -107, 117, 83,
-            65, 92, -2, -51, 8, 111, 106, 84,
-            44, 53, -29, -52, -47, -33, -2, -45
-    };
+    private final byte[] key;
+
+    /**
+     * @param key require a key with length of 24.
+     */
+    public NumberCipher(byte[] key) {
+        if (key == null || key.length != KEY_LEN) {
+            throw new IllegalArgumentException("key must be length of " + KEY_LEN);
+        }
+        this.key = key;
+    }
+
+    public long encryptLong(long value) {
+        byte[] state = long2Bytes(value);
+        for (int i = 0; i < ROUND; i++) {
+            int offset = i << 3;
+            for (int j = 0; j < 8; j++) {
+                // AddRoundKey and SubBytes
+                state[j] = S_BOX[(state[j] ^ key[offset + j]) & 0xFF];
+            }
+            shift_rows(state);
+            multiply(state);
+            multiply_4(state);
+        }
+        for (int j = 0; j < 8; j++) {
+            state[j] ^= key[(ROUND << 3) + j];
+        }
+        return bytes2Long(state);
+    }
+
+    public long decryptLong(long value) {
+        byte[] state = long2Bytes(value);
+        for (int j = 0; j < 8; j++) {
+            state[j] ^= key[(ROUND << 3) + j];
+        }
+        for (int i = ROUND - 1; i >= 0; i--) {
+            inv_multiply(state, 0);
+            inv_multiply(state, 4);
+            inv_shift_rows(state);
+            int offset = i << 3;
+            for (int j = 0; j < 8; j++) {
+                state[j] = (byte) (INV_S_BOX[state[j] & 0xFF] ^ key[offset + j]);
+            }
+        }
+        return bytes2Long(state);
+    }
+
+    public int encryptInt(int value) {
+        byte[] state = int2Bytes(value);
+        for (int i = 0; i < ROUND; i++) {
+            int offset = i << 2;
+            for (int j = 0; j < 4; j++) {
+                state[j] = S_BOX[(state[j] ^ key[offset + j]) & 0xFF];
+            }
+            multiply(state);
+        }
+        for (int j = 0; j < 4; j++) {
+            state[j] ^= key[(ROUND << 2) + j];
+        }
+        return bytes2Int(state);
+    }
+
+    public int decryptInt(int value) {
+        byte[] state = long2Bytes(value);
+        for (int j = 0; j < 4; j++) {
+            state[j] ^= key[(ROUND << 2) + j];
+        }
+        for (int i = ROUND - 1; i >= 0; i--) {
+            inv_multiply(state, 0);
+            for (int j = 0; j < 4; j++) {
+                int offset = i << 2;
+                state[j] = (byte) (INV_S_BOX[state[j] & 0xFF] ^ key[offset + j]);
+            }
+        }
+        return bytes2Int(state);
+    }
 
     /*
      * [b0]	  [02 03 01 01]   [b0]
@@ -105,18 +157,6 @@ public class LongEncoder {
         b[1] ^= mul2[a1 & 0xFF] ^ t;
         b[2] ^= mul2[a2 & 0xFF] ^ t;
         b[3] ^= mul2[a3 & 0xFF] ^ t;
-    }
-
-    private static void multiply_2(byte[] b) {
-        byte a0 = (byte) (b[2] ^ b[3]);
-        byte a1 = (byte) (b[3] ^ b[4]);
-        byte a2 = (byte) (b[4] ^ b[5]);
-        byte a3 = (byte) (b[5] ^ b[2]);
-        byte t = (byte) (a0 ^ a2);
-        b[2] ^= mul2[a0 & 0xFF] ^ t;
-        b[3] ^= mul2[a1 & 0xFF] ^ t;
-        b[4] ^= mul2[a2 & 0xFF] ^ t;
-        b[5] ^= mul2[a3 & 0xFF] ^ t;
     }
 
     private static void multiply_4(byte[] b) {
@@ -143,8 +183,6 @@ public class LongEncoder {
         byte v = (byte) (b[i + 1] ^ b[i + 3]);
         if (i == 0) {
             multiply(b);
-        } else if (i == 2) {
-            multiply_2(b);
         } else if (i == 4) {
             multiply_4(b);
         } else {
@@ -187,88 +225,32 @@ public class LongEncoder {
         state[7] = t1;
     }
 
-    public static long encode64(long value) {
-        byte[] state = long2Bytes(value);
-        for (int i = 0; i < ROUND; i++) {
-            for (int j = 0; j < 8; j++) {
-                int m = ((i << 3) + j);
-                // AddRoundKey and SubBytes
-                state[j] = S_BOX[(state[j] ^ KEY[m]) & 0xFF];
-            }
-            shift_rows(state);
-            multiply(state);
-            multiply_4(state);
-        }
-        for (int j = 0; j < 8; j++) {
-            state[j] ^= KEY[(ROUND << 3) + j];
-        }
-        return bytes2Long(state);
+    public static byte[] int2Bytes(int value) {
+        byte[] state = new byte[4];
+        state[3] = (byte) (value >> 24);
+        state[2] = (byte) (value >> 16);
+        state[1] = (byte) (value >> 8);
+        state[0] = (byte) value;
+        return state;
     }
 
-    public static long decode64(long value) {
-        byte[] state = long2Bytes(value);
-        for (int j = 0; j < 8; j++) {
-            state[j] ^= KEY[(ROUND << 3) + j];
-        }
-        for (int i = ROUND - 1; i >= 0; i--) {
-            inv_multiply(state, 0);
-            inv_multiply(state, 4);
-            inv_shift_rows(state);
-            for (int j = 0; j < 8; j++) {
-                int m = ((i << 3) + j);
-                state[j] = (byte) (INV_S_BOX[state[j] & 0xFF] ^ KEY[m]);
-            }
-        }
-        return bytes2Long(state);
-    }
-
-    public static long encode48(long value) {
-        byte[] state = long2Bytes(value);
-        for (int i = 0; i < ROUND; i++) {
-            for (int j = 0; j < 6; j++) {
-                int m = ((i << 3) + j);
-                // AddRoundKey and SubBytes
-                state[j] = S_BOX[(state[j] ^ KEY[m]) & 0xFF];
-            }
-            // 对于48bit的输入而言，就不需要ShiftRows了
-            // 因为先后对[0,3], [2,5]进行MixColumns已经可以对整个输入扩散了
-            multiply(state);
-            multiply_2(state);
-        }
-        for (int j = 0; j < 6; j++) {
-            state[j] ^= KEY[(ROUND << 3) + j];
-        }
-        // 输出的Long，高位的两个字节没有变
-        // 所以如果输入时小于2^48的数值，则输出也是小于2^48的数组
-        return bytes2Long(state);
-    }
-
-    public static long decode48(long value) {
-        byte[] state = long2Bytes(value);
-        for (int j = 0; j < 6; j++) {
-            state[j] ^= KEY[(ROUND << 3) + j];
-        }
-        for (int i = ROUND - 1; i >= 0; i--) {
-            inv_multiply(state, 2);
-            inv_multiply(state, 0);
-            for (int j = 0; j < 6; j++) {
-                int m = ((i << 3) + j);
-                state[j] = (byte) (INV_S_BOX[state[j] & 0xFF] ^ KEY[m]);
-            }
-        }
-        return bytes2Long(state);
+    public static int bytes2Int(byte[] state) {
+        return (((state[3] & 0xFF) << 24) +
+                ((state[2] & 0xFF) << 16) +
+                ((state[1] & 0xFF) << 8) +
+                (state[0] & 0xFF));
     }
 
     public static byte[] long2Bytes(long value) {
         byte[] state = new byte[8];
-        state[7] = (byte) ((value >> 56) & 0xFF);
-        state[6] = (byte) ((value >> 48) & 0xFF);
-        state[5] = (byte) ((value >> 40) & 0xFF);
-        state[4] = (byte) ((value >> 32) & 0xFF);
-        state[3] = (byte) ((value >> 24) & 0xFF);
-        state[2] = (byte) ((value >> 16) & 0xFF);
-        state[1] = (byte) ((value >> 8) & 0xFF);
-        state[0] = (byte) (value & 0xFF);
+        state[7] = (byte) (value >> 56);
+        state[6] = (byte) (value >> 48);
+        state[5] = (byte) (value >> 40);
+        state[4] = (byte) (value >> 32);
+        state[3] = (byte) (value >> 24);
+        state[2] = (byte) (value >> 16);
+        state[1] = (byte) (value >> 8);
+        state[0] = (byte) value;
         return state;
     }
 
